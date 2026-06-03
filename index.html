@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b3d2e" />
+  <title>BassCast — Bass Fishing Forecast</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">🎣</span>
+      <div>
+        <h1>BassCast</h1>
+        <p class="tagline">Forecast · Lures · Patterns</p>
+      </div>
+    </div>
+    <button id="refresh-btn" class="ghost-btn" title="Refresh weather">⟳</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="forecast">Forecast</button>
+    <button class="tab" data-tab="lures">Lures</button>
+    <button class="tab" data-tab="log">Catch Log</button>
+    <button class="tab" data-tab="patterns">Patterns</button>
+  </nav>
+
+  <main>
+    <!-- FORECAST TAB -->
+    <section id="forecast" class="tab-panel active">
+      <div id="location-bar" class="location-bar">
+        <span id="location-label">📍 Locating you…</span>
+        <button id="change-location" class="link-btn">change</button>
+      </div>
+
+      <div id="forecast-loading" class="loading">Loading conditions…</div>
+
+      <div id="forecast-content" class="hidden">
+        <div class="score-card" id="score-card">
+          <div class="score-ring" id="score-ring">
+            <span class="score-value" id="score-value">--</span>
+            <span class="score-max">/100</span>
+          </div>
+          <div class="score-meta">
+            <h2 id="score-rating">—</h2>
+            <p id="score-summary" class="muted">—</p>
+          </div>
+        </div>
+
+        <h3 class="section-title">Why</h3>
+        <ul class="factor-list" id="factor-list"></ul>
+
+        <h3 class="section-title">Conditions now</h3>
+        <div class="conditions-grid" id="conditions-grid"></div>
+
+        <h3 class="section-title">Best windows today</h3>
+        <div class="windows" id="windows"></div>
+      </div>
+    </section>
+
+    <!-- LURES TAB -->
+    <section id="lures" class="tab-panel">
+      <div class="filters">
+        <label>Water clarity
+          <select id="clarity-select">
+            <option value="clear">Clear</option>
+            <option value="stained" selected>Stained</option>
+            <option value="muddy">Muddy</option>
+          </select>
+        </label>
+        <label>Cover/structure
+          <select id="cover-select">
+            <option value="any" selected>Any</option>
+            <option value="open">Open water</option>
+            <option value="weeds">Weeds / grass</option>
+            <option value="wood">Wood / laydowns</option>
+            <option value="rock">Rock / riprap</option>
+            <option value="docks">Docks</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted small" id="lure-context">Recommendations adapt to live weather and your catch history.</p>
+      <div class="lure-list" id="lure-list"></div>
+    </section>
+
+    <!-- CATCH LOG TAB -->
+    <section id="log" class="tab-panel">
+      <button id="add-catch-btn" class="primary-btn">+ Log a catch</button>
+      <div class="catch-list" id="catch-list"></div>
+    </section>
+
+    <!-- PATTERNS TAB -->
+    <section id="patterns" class="tab-panel">
+      <div id="patterns-content"></div>
+    </section>
+  </main>
+
+  <!-- CATCH MODAL -->
+  <div id="catch-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Log a catch</h2>
+        <button id="close-modal" class="ghost-btn">✕</button>
+      </div>
+      <form id="catch-form">
+        <p class="muted small" id="catch-conditions-note">Current conditions will be saved with this catch.</p>
+
+        <label>Species
+          <select name="species">
+            <option>Largemouth</option>
+            <option>Smallmouth</option>
+            <option>Spotted</option>
+            <option>Other</option>
+          </select>
+        </label>
+
+        <div class="form-row">
+          <label>Weight (lb)
+            <input type="number" name="weight" step="0.1" min="0" placeholder="e.g. 2.5" />
+          </label>
+          <label>Length (in)
+            <input type="number" name="length" step="0.25" min="0" placeholder="e.g. 15" />
+          </label>
+        </div>
+
+        <label>Lure type
+          <select name="lureType" id="lure-type-input"></select>
+        </label>
+
+        <label>Lure color
+          <input type="text" name="lureColor" placeholder="e.g. green pumpkin" />
+        </label>
+
+        <div class="form-row">
+          <label>Cover
+            <select name="cover">
+              <option value="open">Open water</option>
+              <option value="weeds">Weeds / grass</option>
+              <option value="wood">Wood / laydowns</option>
+              <option value="rock">Rock / riprap</option>
+              <option value="docks">Docks</option>
+            </select>
+          </label>
+          <label>Depth (ft)
+            <input type="number" name="depth" step="1" min="0" placeholder="e.g. 8" />
+          </label>
+        </div>
+
+        <label>Notes
+          <textarea name="notes" rows="2" placeholder="Retrieve speed, mood, anything useful…"></textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button type="button" id="cancel-catch" class="ghost-btn">Cancel</button>
+          <button type="submit" class="primary-btn">Save catch</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- LOCATION MODAL -->
+  <div id="location-modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>Set location</h2>
+        <button id="close-location" class="ghost-btn">✕</button>
+      </div>
+      <button id="use-gps" class="primary-btn full">📍 Use my current location</button>
+      <p class="muted small center">or search by name</p>
+      <form id="location-form">
+        <input type="text" name="query" id="location-query" placeholder="City, lake, or place name" />
+        <button type="submit" class="primary-btn full">Search</button>
+      </form>
+      <div id="geo-results" class="geo-results"></div>
+    </div>
+  </div>
+
+  <script src="js/lures.js"></script>
+  <script src="js/weather.js"></script>
+  <script src="js/forecast.js"></script>
+  <script src="js/catches.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
