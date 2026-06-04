@@ -230,7 +230,7 @@ function renderCatchLog() {
   el.innerHTML = list.map((c) => {
     const cond = c.conditions || {};
     const date = new Date(c.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-    const size = [c.weight ? `${c.weight} lb` : null, c.length ? `${c.length}"` : null].filter(Boolean).join(' · ');
+    const size = [c.weight ? `${c.weight} kg` : null, c.length ? `${c.length} cm` : null].filter(Boolean).join(' · ');
     return `
       <div class="catch-card" data-id="${c.id}">
         <div class="catch-top">
@@ -244,7 +244,7 @@ function renderCatchLog() {
         <div class="catch-meta">
           ${chip(date)}
           ${c.cover ? chip(coverLabel(c.cover)) : ''}
-          ${c.depth ? chip(`${c.depth} ft`) : ''}
+          ${c.depth ? chip(`${c.depth} m`) : ''}
           ${cond.waterTempF ? chip(`${fToC(cond.waterTempF)}°C`) : ''}
           ${cond.season ? chip(SEASON_LABELS[cond.season] || cond.season) : ''}
           ${cond.pressureTrend ? chip(`${cond.pressureTrend} baro`) : ''}
@@ -275,8 +275,8 @@ function renderPatterns() {
   el.innerHTML = `
     <div class="stat-row">
       <div class="stat"><div class="stat-num">${p.total}</div><div class="stat-label">catches</div></div>
-      <div class="stat"><div class="stat-num">${p.totalWeight || 0}</div><div class="stat-label">total lb</div></div>
-      <div class="stat"><div class="stat-num">${big && big.weight ? big.weight : '—'}</div><div class="stat-label">personal best (lb)</div></div>
+      <div class="stat"><div class="stat-num">${p.totalWeight || 0}</div><div class="stat-label">total kg</div></div>
+      <div class="stat"><div class="stat-num">${big && big.weight ? big.weight : '—'}</div><div class="stat-label">personal best (kg)</div></div>
     </div>
 
     <h3 class="section-title">Your most productive lures</h3>

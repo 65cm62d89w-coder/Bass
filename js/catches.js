@@ -82,7 +82,7 @@ function makeLearningFn(cond) {
     // Recency: full weight < 1yr, decaying after.
     const ageDays = (now - (c.timestamp || now)) / 86400000;
     const recency = ageDays < 365 ? 1 : Math.max(0.3, 1 - (ageDays - 365) / 1095);
-    const sizeBoost = 1 + Math.min(1, (parseFloat(c.weight) || 0) / 5); // up to 2x for a 5lb+
+    const sizeBoost = 1 + Math.min(1, (parseFloat(c.weight) || 0) / 2.3); // up to 2x for a ~2.3kg+ (5lb) fish
     const contribution = sim * recency * sizeBoost;
     byLure[c.lureType] = (byLure[c.lureType] || 0) + contribution;
   }
