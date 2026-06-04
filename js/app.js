@@ -16,6 +16,12 @@ function loadPrefs() {
 }
 function savePrefs() { localStorage.setItem(PREFS_KEY, JSON.stringify(state.prefs)); }
 
+// Prefs plus the current latitude, so the forecast can infer the hemisphere
+// (autumn falls in different months north vs. south of the equator).
+function condPrefs() {
+  return { ...state.prefs, lat: state.location ? state.location.lat : undefined };
+}
+
 function loadLocation() {
   try { return JSON.parse(localStorage.getItem(LOC_KEY)); } catch { return null; }
 }
@@ -90,7 +96,7 @@ async function loadForLocation(loc, force = false) {
 
   try {
     state.weather = await fetchWeather(loc.lat, loc.lon);
-    state.conditions = buildConditions(state.weather, state.prefs);
+    state.conditions = buildConditions(state.weather, condPrefs());
     renderForecast();
     renderLures();
     document.getElementById('forecast-loading').classList.add('hidden');
@@ -135,19 +141,20 @@ function renderForecast() {
 
 function summaryLine(c, rating) {
   const season = SEASON_LABELS[c.season] || c.season;
-  return `${season} · water ~${c.waterTempF}°F · ${c.pressureTrend} pressure`;
+  return `${season} · water ~${fToC(c.waterTempF)}°C · ${c.pressureTrend} pressure`;
 }
 
 function conditionsHtml(w, c) {
+  const moon = moonInfo(w.moonPhase);
   const cells = [
-    ['🌡️', 'Air', `${Math.round(w.tempF)}°F`],
-    ['💧', 'Water (est.)', `${c.waterTempF}°F`],
-    ['🧭', 'Pressure', `${w.pressureInHg}" ${trendArrow(w.pressureTrend)}`],
-    ['💨', 'Wind', `${Math.round(w.windMph)} mph ${degToCompass(w.windDir)}`],
+    ['🌡️', 'Air', `${fToC(w.tempF)}°C`],
+    ['💧', 'Water (est.)', `${fToC(c.waterTempF)}°C`],
+    ['🧭', `Pressure (${w.pressureTrend})`, `${Math.round(w.pressureHpa)} hPa ${trendArrow(w.pressureTrend)}`],
+    ['💨', 'Wind', `${mphToKmh(w.windMph)} km/h ${degToCompass(w.windDir)}`],
     ['☁️', 'Cloud', `${Math.round(w.cloudPct)}%`],
     ['🌅', 'Sunrise', timeOnly(w.sunrise)],
     ['🌇', 'Sunset', timeOnly(w.sunset)],
-    ['🌙', 'Moon', moonLabel(w.moonPhase)],
+    [moon.emoji, `Moon · ${moon.illum}% lit`, moon.name],
   ];
   return cells.map(([icon, label, val]) =>
     `<div class="cond-cell"><span class="cond-icon">${icon}</span>
@@ -163,12 +170,12 @@ function setupFilters() {
   cover.value = state.prefs.cover;
   clarity.addEventListener('change', () => {
     state.prefs.clarity = clarity.value; savePrefs();
-    if (state.weather) state.conditions = buildConditions(state.weather, state.prefs);
+    if (state.weather) state.conditions = buildConditions(state.weather, condPrefs());
     renderLures();
   });
   cover.addEventListener('change', () => {
     state.prefs.cover = cover.value; savePrefs();
-    if (state.weather) state.conditions = buildConditions(state.weather, state.prefs);
+    if (state.weather) state.conditions = buildConditions(state.weather, condPrefs());
     renderLures();
   });
 }
@@ -238,7 +245,7 @@ function renderCatchLog() {
           ${chip(date)}
           ${c.cover ? chip(coverLabel(c.cover)) : ''}
           ${c.depth ? chip(`${c.depth} ft`) : ''}
-          ${cond.waterTempF ? chip(`${cond.waterTempF}°F`) : ''}
+          ${cond.waterTempF ? chip(`${fToC(cond.waterTempF)}°C`) : ''}
           ${cond.season ? chip(SEASON_LABELS[cond.season] || cond.season) : ''}
           ${cond.pressureTrend ? chip(`${cond.pressureTrend} baro`) : ''}
         </div>
@@ -324,7 +331,7 @@ function setupModals() {
 function openCatchModal() {
   const note = document.getElementById('catch-conditions-note');
   note.textContent = state.conditions
-    ? `Saving current conditions: ${SEASON_LABELS[state.conditions.season]}, water ~${state.conditions.waterTempF}°F, ${state.conditions.pressureTrend} pressure, ${state.prefs.clarity} water.`
+    ? `Saving current conditions: ${SEASON_LABELS[state.conditions.season]}, water ~${fToC(state.conditions.waterTempF)}°C, ${state.conditions.pressureTrend} pressure, ${state.prefs.clarity} water.`
     : 'Load the forecast first to attach live conditions (you can still log the catch).';
   document.getElementById('catch-modal').classList.remove('hidden');
 }
@@ -405,11 +412,6 @@ function timeOnly(iso) {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
-function moonLabel(phase) {
-  if (phase == null) return '—';
-  const names = ['New 🌑', 'Wax 🌒', 'First ¼ 🌓', 'Wax 🌔', 'Full 🌕', 'Wan 🌖', 'Last ¼ 🌗', 'Wan 🌘'];
-  return names[Math.round(phase * 8) % 8];
-}
 
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (m) =>

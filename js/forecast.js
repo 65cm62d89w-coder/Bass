@@ -58,11 +58,14 @@ function lowLightInfo(weather, now = new Date()) {
 function buildConditions(weather, userPrefs = {}, now = new Date()) {
   const waterTempF = estimateWaterTempF(weather);
   let season = deriveSeason(waterTempF);
-  // Cooling water in autumn months behaves like "fall" pattern.
+  // Cooling water in autumn behaves like the "fall" pattern. Autumn months flip
+  // between hemispheres, so pick the window based on latitude (default north).
   const month = now.getMonth(); // 0-based
-  const northernFall = month >= 8 && month <= 10; // Sep-Nov
-  const southernFall = month >= 2 && month <= 4;   // Mar-May (S. hemisphere)
-  if ((season === 'summer' || season === 'postspawn') && (northernFall || southernFall)) {
+  const southern = typeof userPrefs.lat === 'number' && userPrefs.lat < 0;
+  const fallMonths = southern
+    ? month >= 2 && month <= 4   // Mar-May  (S. hemisphere autumn — e.g. South Africa)
+    : month >= 8 && month <= 10; // Sep-Nov  (N. hemisphere autumn)
+  if ((season === 'summer' || season === 'postspawn') && fallMonths) {
     season = 'fall';
   }
   const light = lowLightInfo(weather, now);
@@ -70,6 +73,7 @@ function buildConditions(weather, userPrefs = {}, now = new Date()) {
   return {
     waterTempF,
     season,
+    hemisphere: southern ? 'S' : 'N',
     clarity: userPrefs.clarity || 'stained',
     cover: userPrefs.cover || 'any',
     cloudPct: weather.cloudPct,
@@ -77,6 +81,8 @@ function buildConditions(weather, userPrefs = {}, now = new Date()) {
     pressureTrend: weather.pressureTrend,
     pressureState: weather.pressureState,
     pressureInHg: weather.pressureInHg,
+    pressureHpa: weather.pressureHpa,
+    moonPhase: weather.moonPhase,
     isLowLight: light.isLowLight,
     isBright: light.isBright,
     isDay: weather.isDay,
@@ -93,16 +99,17 @@ function scoreActivity(weather, conditions, now = new Date()) {
 
   // --- Water temperature (the master variable) ---
   const wt = conditions.waterTempF;
+  const wtC = fToC(wt); // display in Celsius
   if (wt >= 58 && wt <= 74) {
-    score += 14; factors.push(good(`Water ~${wt}°F is in the prime bass feeding range`));
+    score += 14; factors.push(good(`Water ~${wtC}°C is in the prime bass feeding range`));
   } else if (wt >= 50 && wt < 58) {
-    score += 6; factors.push(ok(`Water ~${wt}°F — bass active but metabolism slowing`));
+    score += 6; factors.push(ok(`Water ~${wtC}°C — bass active but metabolism slowing`));
   } else if (wt > 74 && wt <= 84) {
-    score += 4; factors.push(ok(`Water ~${wt}°F — warm; fish early, late, or deep`));
+    score += 4; factors.push(ok(`Water ~${wtC}°C — warm; fish early, late, or deep`));
   } else if (wt < 50) {
-    score -= 10; factors.push(bad(`Water ~${wt}°F is cold — slow finesse presentations`));
+    score -= 10; factors.push(bad(`Water ~${wtC}°C is cold — slow finesse presentations`));
   } else {
-    score -= 8; factors.push(bad(`Water ~${wt}°F is hot — bite likely only at low light`));
+    score -= 8; factors.push(bad(`Water ~${wtC}°C is hot — bite likely only at low light`));
   }
 
   // --- Barometric pressure trend (huge for bass) ---
@@ -130,9 +137,9 @@ function scoreActivity(weather, conditions, now = new Date()) {
 
   // --- Wind ---
   if (conditions.windMph >= 6 && conditions.windMph <= 15) {
-    score += 8; factors.push(good(`${Math.round(conditions.windMph)} mph wind — light chop activates feeding`));
+    score += 8; factors.push(good(`${mphToKmh(conditions.windMph)} km/h wind — light chop activates feeding`));
   } else if (conditions.windMph > 18) {
-    score -= 6; factors.push(bad(`${Math.round(conditions.windMph)} mph wind — tough to fish, find protected water`));
+    score -= 6; factors.push(bad(`${mphToKmh(conditions.windMph)} km/h wind — tough to fish, find protected water`));
   } else if (conditions.windMph < 3) {
     score -= 2; factors.push(ok('Slick calm — finesse and topwater at first/last light'));
   }
@@ -151,6 +158,17 @@ function scoreActivity(weather, conditions, now = new Date()) {
     score += 3; factors.push(ok('Spawn — sight-fish beds; reaction strikes over hunger'));
   } else if (conditions.season === 'winter') {
     factors.push(ok('Winter — target warmest water in the afternoon'));
+  }
+
+  // --- Moon phase (solunar) ---
+  // Activity tends to peak around the new and full moons (major feeding periods).
+  if (typeof conditions.moonPhase === 'number') {
+    const m = moonInfo(conditions.moonPhase);
+    if (m.major) {
+      score += 6; factors.push(good(`${m.emoji} ${m.name} — solunar major period, feeding tends to peak`));
+    } else if (m.minor) {
+      score += 2; factors.push(ok(`${m.emoji} ${m.name} — moderate solunar influence`));
+    }
   }
 
   score = Math.max(2, Math.min(98, Math.round(score)));
@@ -205,12 +223,48 @@ function bestWindows(weather, conditions) {
     }));
 }
 
+// --- Unit conversions (internal model is °F / mph; we display metric) ---
+function fToC(f) { return Math.round((f - 32) * 5 / 9); }
+function mphToKmh(mph) { return Math.round(mph * 1.60934); }
+function inHgToHpa(inHg) { return Math.round(inHg * 33.8639); }
+
+/**
+ * Moon details from a phase fraction (0=new, 0.5=full).
+ * Returns name, emoji, illumination %, and solunar major/minor flags.
+ */
+function moonInfo(phase) {
+  if (typeof phase !== 'number') return { name: '—', emoji: '🌙', illum: null, major: false, minor: false };
+  const p = ((phase % 1) + 1) % 1;
+  const names = [
+    { name: 'New', emoji: '🌑' },
+    { name: 'Waxing crescent', emoji: '🌒' },
+    { name: 'First quarter', emoji: '🌓' },
+    { name: 'Waxing gibbous', emoji: '🌔' },
+    { name: 'Full', emoji: '🌕' },
+    { name: 'Waning gibbous', emoji: '🌖' },
+    { name: 'Last quarter', emoji: '🌗' },
+    { name: 'Waning crescent', emoji: '🌘' },
+  ];
+  const idx = Math.round(p * 8) % 8;
+  const illum = Math.round((1 - Math.cos(2 * Math.PI * p)) / 2 * 100);
+  // Distance to nearest new (0/1) or full (0.5) moon, in phase units.
+  const dNew = Math.min(p, 1 - p);
+  const dFull = Math.abs(p - 0.5);
+  const major = dNew < 0.06 || dFull < 0.06;   // ~±1.7 days of new/full
+  const minor = (dNew < 0.12 || dFull < 0.12) && !major;
+  return { ...names[idx], illum, major, minor };
+}
+
 window.buildConditions = buildConditions;
 window.scoreActivity = scoreActivity;
 window.bestWindows = bestWindows;
 window.estimateWaterTempF = estimateWaterTempF;
 window.deriveSeason = deriveSeason;
 window.SEASON_LABELS = SEASON_LABELS;
+window.fToC = fToC;
+window.mphToKmh = mphToKmh;
+window.inHgToHpa = inHgToHpa;
+window.moonInfo = moonInfo;
 
 // Tiny tagged-factor helpers.
 function good(t) { return { kind: 'good', text: t }; }
