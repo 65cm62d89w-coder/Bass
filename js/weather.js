@@ -27,7 +27,10 @@ async function fetchWeather(lat, lon) {
       'weather_code',
     ].join(','),
     hourly: ['temperature_2m', 'surface_pressure', 'cloud_cover', 'precipitation_probability', 'wind_speed_10m', 'is_day'].join(','),
-    daily: ['sunrise', 'sunset', 'temperature_2m_max', 'temperature_2m_min', 'moon_phase'].join(','),
+    // NOTE: Open-Meteo's forecast API does not provide moon_phase — requesting
+    // it returns a 400 and breaks the whole call. We compute the moon phase
+    // locally instead (see moonPhaseFraction below).
+    daily: ['sunrise', 'sunset', 'temperature_2m_max', 'temperature_2m_min'].join(','),
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     precipitation_unit: 'inch',
@@ -36,8 +39,11 @@ async function fetchWeather(lat, lon) {
   });
 
   const res = await fetch(`${OPEN_METEO}?${params.toString()}`);
-  if (!res.ok) throw new Error(`Weather request failed (${res.status})`);
-  const data = await res.json();
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data || data.error) {
+    const reason = data && data.reason ? data.reason : `HTTP ${res.status}`;
+    throw new Error(`Weather request failed: ${reason}`);
+  }
 
   // Pressure trend: compare pressure 3h ago vs now from the hourly series.
   const trend = computePressureTrend(data);
@@ -62,9 +68,22 @@ async function fetchWeather(lat, lon) {
     sunset: data.daily.sunset?.[0],
     hiF: data.daily.temperature_2m_max?.[0],
     loF: data.daily.temperature_2m_min?.[0],
-    moonPhase: data.daily.moon_phase?.[0],
+    moonPhase: moonPhaseFraction(new Date()),
     timezone: data.timezone,
   };
+}
+
+/**
+ * Moon phase as a fraction 0..1 (0 = new, 0.5 = full), computed from the date.
+ * Based on the mean synodic month since a known new moon (2000-01-06 18:14 UTC).
+ */
+function moonPhaseFraction(date = new Date()) {
+  const SYNODIC = 29.53058867; // days
+  const refDays = Date.UTC(2000, 0, 6, 18, 14) / 86400000;
+  const days = date.getTime() / 86400000 - refDays;
+  let phase = (days % SYNODIC) / SYNODIC;
+  if (phase < 0) phase += 1;
+  return phase;
 }
 
 function computePressureTrend(data) {
